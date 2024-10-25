@@ -3,9 +3,8 @@ package setup
 import (
 	"os"
 
+	"github.com/bububa/osssync/internal/service"
 	"github.com/urfave/cli/v2"
-
-	"github.com/bububa/osssync/internal/config"
 )
 
 func Setup(c *cli.Context) error {
@@ -17,5 +16,5 @@ func Setup(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	return config.WriteConfigFile(bs)
+	return service.WriteConfigFile(bs)
 }
