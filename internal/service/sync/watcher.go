@@ -12,26 +12,26 @@ import (
 	"github.com/bububa/osssync/pkg/watcher"
 )
 
-func Watch(cfg *config.Setting) (*watcher.Watcher, error) {
+func Watch(cfg *config.Setting, msgCh chan *lib.CPMonitorSnap) (*watcher.Watcher, error) {
 	op := fsnotify.Create | fsnotify.Write | fsnotify.Rename
 	if cfg.Delete {
-		op = op | fsnotify.Remove
+		op |= fsnotify.Remove
 	}
 	w, err := watcher.NewWatcher(watcher.WithIgnoreHiddenFiles(cfg.IgnoreHiddenFiles), watcher.WithOpFilter(op))
 	if err != nil {
 		return nil, err
 	}
-	cm := new(lib.CommandManager)
-	cm.Init()
+	syncCommand := newSyncer(cfg, msgCh)
 	go func() {
 		for {
 			select {
 			case event := <-w.Events:
-				if err := doSync(cm, cfg, &event); err != nil {
+				log.Println("fsnotify", event)
+				if err := syncCommand.RunCommand(); err != nil {
 					log.Println(err)
 				}
 			case err := <-w.Errors:
-				log.Println(err)
+				log.Println("error", err)
 			case <-w.Closed:
 				return
 			}
@@ -40,20 +40,23 @@ func Watch(cfg *config.Setting) (*watcher.Watcher, error) {
 	if err := w.AddRecursive(cfg.Local); err != nil {
 		return nil, err
 	}
-	doSync(cm, cfg, nil)
+	if err := syncCommand.RunCommand(); err != nil {
+		log.Println(err)
+	}
 	return w, nil
 }
 
-func doSync(cm *lib.CommandManager, setting *config.Setting, event *fsnotify.Event) error {
+func newSyncer(setting *config.Setting, monitor chan *lib.CPMonitorSnap) *lib.SyncCommand {
 	args := []string{
 		setting.Local,
 		fmt.Sprintf("oss://%s", filepath.Join(setting.Bucket, setting.Prefix)),
 	}
 	var (
 		TRUE      = true
-		outputDir = filepath.Join(setting.Prefix, ".ossutil_output")
-		cpDir     = filepath.Join(setting.Prefix, ".ossutil_checkoutpoint")
-		backupDir = filepath.Join(setting.Prefix, ".ossutil_backup")
+		FALSE     = false
+		outputDir = filepath.Join(setting.Local, ".ossutil_output")
+		cpDir     = filepath.Join(setting.Local, ".ossutil_checkoutpoint")
+		backupDir = filepath.Join(setting.Local, ".ossutil_backup")
 	)
 	_, options, _ := lib.ParseArgOptions()
 	options[lib.OptionEndpoint] = &setting.Endpoint
@@ -66,12 +69,17 @@ func doSync(cm *lib.CommandManager, setting *config.Setting, event *fsnotify.Eve
 	if setting.Delete {
 		options[lib.OptionDelete] = &TRUE
 	}
+	if setting.IgnoreHiddenFiles {
+		options[lib.OptionIgnoreHiddenFile] = &TRUE
+	} else {
+		options[lib.OptionIgnoreHiddenFile] = &FALSE
+	}
 	options[lib.OptionDisableDirObject] = &TRUE
 	options[lib.OptionDisableAllSymlink] = &TRUE
 	options[lib.OptionForce] = &TRUE
 	options[lib.OptionUpdate] = &TRUE
-	if _, err := cm.RunCommand("sync", args, options); err != nil {
-		return err
-	}
-	return nil
+	syncCommand := lib.NewSyncCommand()
+	syncCommand.Init(args, options)
+	syncCommand.SetMonitor(monitor)
+	return syncCommand
 }

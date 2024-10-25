@@ -6,22 +6,24 @@ import (
 	"os"
 	"path/filepath"
 
+	"go.uber.org/atomic"
 	"gopkg.in/fsnotify.v1"
 )
 
 // Watcher wraps fsnotify.Watcher. When fsnotify adds recursive watches, you should be able to switch your code to use fsnotify.Watcher
 type Watcher struct {
 	fsnotify *fsnotify.Watcher
+	isClosed *atomic.Bool
 	Events   chan fsnotify.Event
 	Errors   chan error
 	Closed   chan struct{}
 	done     chan struct{}
+	notifyCh chan struct{}
 	// filters filter hooks
 	filters []FilterFileHookFunc
 	op      fsnotify.Op
 	// ignoreHidden ignore hidden files or not.
 	ignoreHidden bool
-	isClosed     bool
 }
 
 // NewWatcher establishes a new watcher with the underlying OS and begins waiting for events.
@@ -33,10 +35,12 @@ func NewWatcher(opts ...Option) (*Watcher, error) {
 
 	m := &Watcher{}
 	m.fsnotify = fsWatch
+	m.notifyCh = make(chan struct{}, 1)
 	m.Events = make(chan fsnotify.Event)
 	m.Errors = make(chan error)
-	m.Closed = make(chan struct{})
-	m.done = make(chan struct{})
+	m.Closed = make(chan struct{}, 1)
+	m.done = make(chan struct{}, 1)
+	m.isClosed = atomic.NewBool(false)
 	for _, opt := range opts {
 		opt(m)
 	}
@@ -48,7 +52,7 @@ func NewWatcher(opts ...Option) (*Watcher, error) {
 
 // Add starts watching the named file or directory (non-recursively).
 func (m *Watcher) Add(name string) error {
-	if m.isClosed {
+	if m.isClosed.Load() {
 		return errors.New("rfsnotify instance already closed")
 	}
 	return m.fsnotify.Add(name)
@@ -56,7 +60,7 @@ func (m *Watcher) Add(name string) error {
 
 // AddRecursive starts watching the named directory and all sub-directories.
 func (m *Watcher) AddRecursive(name string) error {
-	if m.isClosed {
+	if m.isClosed.Load() {
 		return errors.New("rfsnotify instance already closed")
 	}
 	if err := m.watchRecursive(name, false); err != nil {
@@ -80,11 +84,11 @@ func (m *Watcher) RemoveRecursive(name string) error {
 
 // Close removes all watches and closes the events channel.
 func (m *Watcher) Close() error {
-	if m.isClosed {
+	if m.isClosed.Load() {
 		return nil
 	}
 	close(m.done)
-	m.isClosed = true
+	m.isClosed.Store(true)
 	return nil
 }
 
@@ -110,6 +114,8 @@ func (m *Watcher) start() {
 			if m.op == 0 || e.Op&m.op != 0 {
 				m.Events <- e
 			}
+		case <-m.notifyCh:
+			m.Events <- fsnotify.Event{Name: "notify"}
 		case e := <-m.fsnotify.Errors:
 			m.Errors <- e
 
@@ -121,6 +127,10 @@ func (m *Watcher) start() {
 			return
 		}
 	}
+}
+
+func (m *Watcher) Notify() {
+	m.notifyCh <- struct{}{}
 }
 
 // watchRecursive adds all directories under the given one to the watch list.
