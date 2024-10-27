@@ -1,0 +1,33 @@
+package zerolog
+
+import (
+	"os"
+	"time"
+
+	"gopkg.in/natefinch/lumberjack.v2"
+  "github.com/rs/zerolog"
+)
+var logger *zerolog.Logger
+
+func init() {
+  var logPath string
+  logPaths, err := scope.LookupData("app.log")
+  if err != nil || len(logPaths) == 0 {
+    paths := scope.DataDirs()
+    if _, err := os.Stat(paths[0]); os.IsNotExist(err) {
+        if err := os.Mkdir(paths[0], 755); err != nil {
+          log.Fatalln(err)
+        }
+    }
+    logPath = filepath.Join(paths[0], "app.log")
+  } else {
+    logPath = logPaths
+  }
+	writer := &lumberjack.Logger{
+			Filename:   logPath,
+			MaxSize:    10 << 20,
+			MaxBackups: 5,
+			MaxAge:     60 * 60 * 24,
+		}
+	logger = &zerolog.New(writer).Timestamp().Logger()
+}
