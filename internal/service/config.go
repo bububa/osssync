@@ -1,8 +1,6 @@
 package service
 
 import (
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -43,7 +41,11 @@ func LoadConfig(cfg *config.Config) error {
 	if len(configPath) > 0 {
 		return ConfigLoader(cfg, configPath[0])
 	}
-	return errors.New("no config file found")
+	cfgPath, err := WriteConfigFile(nil)
+	if err != nil {
+		return err
+	}
+	return ConfigLoader(cfg, cfgPath)
 }
 
 func LoadConfigString() ([]byte, error) {
@@ -55,23 +57,26 @@ func LoadConfigString() ([]byte, error) {
 	if len(configPath) > 0 {
 		return os.ReadFile(configPath[0])
 	}
-	return nil, errors.New("no config file found")
+	if _, err := WriteConfigFile(nil); err != nil {
+		return nil, err
+	}
+	return nil, nil
 }
 
-func WriteConfigFile(bs []byte) error {
+func WriteConfigFile(bs []byte) (string, error) {
 	scope := gap.NewScope(gap.User, config.AppIdentity)
 	dirs, err := scope.LookupConfig(config.AppConfig)
 	if err != nil {
-		return err
+		return "", err
 	}
 	var configPath string
 	if len(dirs) == 0 {
 		dirs, err = scope.ConfigDirs()
 		if err != nil {
-			return err
+			return "", err
 		}
 		if err := os.Mkdir(dirs[0], os.ModePerm); err != nil {
-			return err
+			return "", err
 		}
 		configPath = filepath.Join(dirs[0], config.AppConfig)
 	} else {
@@ -79,11 +84,11 @@ func WriteConfigFile(bs []byte) error {
 	}
 	w, err := os.Create(configPath)
 	if err != nil {
-		fmt.Println(err)
-		return err
+		return "", err
 	}
+	defer w.Close()
 	if _, err := w.Write(bs); err != nil {
-		return err
+		return "", err
 	}
-	return nil
+	return configPath, nil
 }

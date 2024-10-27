@@ -1,7 +1,7 @@
 package config
 
 type Config struct {
-	Settings []Setting `required:"true"`
+	Settings []Setting
 }
 
 type Setting struct {

@@ -16,5 +16,6 @@ func Setup(c *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	return service.WriteConfigFile(bs)
+	_, err = service.WriteConfigFile(bs)
+	return err
 }

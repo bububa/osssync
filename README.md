@@ -18,26 +18,30 @@ Delete = false # delete oss files if local file deleted
 
 ## for linux
 
-- ~/.config/com.thepeppersstudio.osssync/config
-- /etc/xdg/com.thepeppersstudio.osssync/config
-- /etc/com.thepeppersstudio.osssync/config
+- ~/.config/org.musicpeace.osssync/config
+- /etc/xdg/org.musicpeace.osssync/config
+- /etc/org.musicpeace.osssync/config
 
 ## for Mac
 
-~/Library/Preferences/com.thepeppersstudio.osssync/config
+~/Library/Preferences/org.musicpeace.osssync/config
 
 # Install
 
-## for linux
+## for CLI
 
 ```bash
 make cli
-./dist/oss-sync-cli sync
+./dist/osssync-cli sync
 ```
 
-## for MacOS
+## for GUI
 
-```bash
+````bash
 make darwin
-open ./dist/oss-sync.app
-```
+open ./dist/osssync.app
+
+# Make
+```bash
+make bundle
+````
