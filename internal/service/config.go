@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -62,7 +63,9 @@ func SaveConfig(cfg *config.Config) error {
 			return err
 		}
 		if err := os.Mkdir(dirs[0], os.ModePerm); err != nil {
-			return err
+			if !errors.Is(err, os.ErrExist) {
+				return err
+			}
 		}
 		configPath = filepath.Join(dirs[0], config.AppConfig)
 	} else {
@@ -89,7 +92,9 @@ func WriteConfigFile(bs []byte) (string, error) {
 			return "", err
 		}
 		if err := os.Mkdir(dirs[0], os.ModePerm); err != nil {
-			return "", err
+			if !errors.Is(err, os.ErrExist) {
+				return "", err
+			}
 		}
 		configPath = filepath.Join(dirs[0], config.AppConfig)
 	} else {

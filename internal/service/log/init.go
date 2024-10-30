@@ -1,6 +1,7 @@
 package log
 
 import (
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -22,7 +23,7 @@ func init() {
 	dir := filepath.Dir(logPath)
 
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		if err := os.MkdirAll(dir, os.ModePerm); err != nil && !errors.Is(err, os.ErrExist) {
 			log.Fatalln(err)
 		}
 	}
