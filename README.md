@@ -6,6 +6,7 @@ oss-sync is a tool to sync local files to aliyun.com OSS.
 
 ```toml
 [[Settings]]
+Name = "setting name"
 Local = "local folders to sync"
 IgnoreHiddenFiles = true # ignore local hidden files
 Endpoint = "oss-cn-zhangjiakou.aliyuncs.com" # oss endpoint
@@ -18,26 +19,48 @@ Delete = false # delete oss files if local file deleted
 
 ## for linux
 
-- ~/.config/com.thepeppersstudio.osssync/config
-- /etc/xdg/com.thepeppersstudio.osssync/config
-- /etc/com.thepeppersstudio.osssync/config
+- ~/.config/org.musicpeace.osssync/config.toml
+- /etc/xdg/org.musicpeace.osssync/config.toml
+- /etc/org.musicpeace.osssync/config.toml
 
 ## for Mac
 
-~/Library/Preferences/com.thepeppersstudio.osssync/config
+~/Library/Preferences/org.musicpeace.osssync/config.toml
 
-# Install
+## for Windows
+
+%LOCALAPPDATA%/org.musicpeace.osssync/Config/config.toml
+
+# Log
 
 ## for linux
 
+~/.local/share/org.musicpeace.osssync/app.log
+
+## for Mac
+
+~/Library/Logs/org.musicpeace.osssync/app.log
+
+## for Windows
+
+%LOCALAPPDATA%/org.musicpeace.osssync/Logs/log.log
+
+# Install
+
+## for CLI
+
 ```bash
 make cli
-./dist/oss-sync-cli sync
+./dist/osssync-cli sync
 ```
 
-## for MacOS
+## for GUI
 
-```bash
+````bash
 make darwin
-open ./dist/oss-sync.app
-```
+open ./dist/osssync.app
+
+# Make
+```bash
+make bundle
+````
