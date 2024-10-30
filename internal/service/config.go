@@ -8,6 +8,7 @@ import (
 	gap "github.com/muesli/go-app-paths"
 
 	"github.com/bububa/osssync/internal/config"
+	"github.com/bububa/osssync/internal/config/template"
 )
 
 var configSetting *config.Config
@@ -48,19 +49,31 @@ func LoadConfig(cfg *config.Config) error {
 	return ConfigLoader(cfg, cfgPath)
 }
 
-func LoadConfigString() ([]byte, error) {
+func SaveConfig(cfg *config.Config) error {
 	scope := gap.NewScope(gap.User, config.AppIdentity)
-	configPath, err := scope.LookupConfig(config.AppConfig)
+	dirs, err := scope.LookupConfig(config.AppConfig)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if len(configPath) > 0 {
-		return os.ReadFile(configPath[0])
+	var configPath string
+	if len(dirs) == 0 {
+		dirs, err = scope.ConfigDirs()
+		if err != nil {
+			return err
+		}
+		if err := os.Mkdir(dirs[0], os.ModePerm); err != nil {
+			return err
+		}
+		configPath = filepath.Join(dirs[0], config.AppConfig)
+	} else {
+		configPath = dirs[0]
 	}
-	if _, err := WriteConfigFile(nil); err != nil {
-		return nil, err
+	w, err := os.Create(configPath)
+	if err != nil {
+		return err
 	}
-	return nil, nil
+	defer w.Close()
+	return template.Template().ExecuteTemplate(w, "config.tpl", cfg)
 }
 
 func WriteConfigFile(bs []byte) (string, error) {

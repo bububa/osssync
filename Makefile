@@ -35,23 +35,26 @@ app:
 darwin:
 	rm -rf $(DARWIN_BUNDLE) $(DIST_PATH)/
 	make app
-	$(GOBIN)/fyne package --os darwin --id $(APP_BUNDLE_ID) --name $(APP_NAME)  --icon $(ASSETS)/AppIcon.png --exe $(DIST_PATH)/$(APP_NAME)
+	fyne package --os darwin --id $(APP_BUNDLE_ID) --name $(APP_NAME)  --icon $(ASSETS)/AppIcon.png --exe $(DIST_PATH)/$(APP_NAME)
 	mv $(DARWIN_BUNDLE) $(DIST_PATH)/
 	rm -rf $(DIST_PATH)/$(APP_NAME)
 
 linux:
 	rm -rf $(LINUX_BUNDLE) $(DIST_PATH)/
 	make app
-	$(GOBIN)/fyne package --os linux --id $(APP_BUNDLE_ID) --name $(APP_NAME)  --icon $(ASSETS)/AppIcon.png --exe $(DIST_PATH)/$(APP_NAME)
+	fyne package --os linux --id $(APP_BUNDLE_ID) --name $(APP_NAME)  --icon $(ASSETS)/AppIcon.png --exe $(DIST_PATH)/$(APP_NAME)
 	mv $(LINUX_BUNDLE) $(DIST_PATH)/
 	rm -rf $(DIST_PATH)/$(APP_NAME)
 
 windows:
 	rm -rf $(WINDOWS_BUNDLE) $(DIST_PATH)/
 	make app
-	$(GOBIN)/fyne package --os windows --id $(APP_BUNDLE_ID) --name $(APP_NAME)  --icon $(ASSETS)/AppIcon.png --exe $(DIST_PATH)/$(APP_NAME)
+	fyne package --os windows --id $(APP_BUNDLE_ID) --name $(APP_NAME)  --icon $(ASSETS)/AppIcon.png --exe $(DIST_PATH)/$(APP_NAME)
 	mv $(WINDOWS_BUNDLE) $(DIST_PATH)/
 	rm -rf $(DIST_PATH)/$(APP_NAME)
+
+prepare:
+	go install fyne.io/fyne/v2/cmd/fyne@latest
 
 darwin-prepare:
 	xcode-select -p

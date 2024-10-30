@@ -1,5 +1,6 @@
 package config
 
 const (
-	AppConfig = "config"
+	AppConfig = "config.toml"
+	AppLog    = "app.log"
 )
