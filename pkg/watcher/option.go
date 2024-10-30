@@ -5,7 +5,7 @@ import (
 	"os"
 	"regexp"
 
-	"gopkg.in/fsnotify.v1"
+	"github.com/fsnotify/fsnotify"
 )
 
 // ErrSkip is less of an error, but more of a way for path hooks to skip a file or

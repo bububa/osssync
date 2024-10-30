@@ -1,0 +1,32 @@
+{
+  "Advanced": "高级",
+  "Cancel": "取消",
+  "Confirm": "确定",
+  "Copy": "复制",
+  "Create Folder": "创建目录",
+  "Cut": "剪切",
+  "Enter filename": "输入文件名",
+  "Error": "错误",
+  "Favourites": "收藏",
+  "File": "文件",
+  "Folder": "目录",
+  "New Folder": "新建目录",
+  "No": "不",
+  "OK": "好的",
+  "Open": "打开",
+  "Paste": "黏贴",
+  "Quit": "退出",
+  "Redo": "重做",
+  "Save": "保存",
+  "Select all": "选择全部",
+  "Show Hidden Files": "显示隐藏文件",
+  "Undo": "撤销",
+  "Yes": "是的",
+
+  "file.name": {
+    "other": "名称"
+  },
+  "file.parent": {
+    "other": "上级目录"
+  }
+}

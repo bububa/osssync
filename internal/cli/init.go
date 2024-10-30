@@ -6,7 +6,6 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/bububa/osssync/internal/config"
-	"github.com/bububa/osssync/internal/service/setup"
 )
 
 func init() {
@@ -35,12 +34,6 @@ func NewApp(app *cli.App) {
 				Usage:    "Start syncing",
 				Category: "Sync",
 				Action:   Sync,
-			},
-			{
-				Name:     "setup",
-				Usage:    "setup",
-				Category: "Setup",
-				Action:   setup.Setup,
 			},
 		},
 	}

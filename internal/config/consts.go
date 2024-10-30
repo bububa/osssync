@@ -1,7 +1,6 @@
 package config
 
 const (
-	AppName     = "osssync"
-	AppIdentity = "com.thepeppersstudio.osssync"
-	AppConfig   = "config"
+	AppConfig = "config.toml"
+	AppLog    = "app.log"
 )
