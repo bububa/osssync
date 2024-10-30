@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/bububa/osssync/internal/config"
@@ -90,6 +91,13 @@ func EditSetting(a fyne.App, cfg config.Setting, callback func(fyne.App, config.
 		}
 	}, w)
 	folderDialog.SetConfirmText(lang.L("chooseConfirm"))
+	if cfg.Local != "" {
+		if uri, err := storage.ParseURI(fmt.Sprintf("file://%s", filepath.ToSlash(cfg.Local))); err == nil {
+			if uri, err := storage.ListerForURI(uri); err == nil {
+				folderDialog.SetLocation(uri)
+			}
+		}
+	}
 	folderBtn := widget.NewButton(lang.L("config.chooseFolder"), folderDialog.Show)
 	localField := widget.NewEntryWithData(localData)
 	localField.Validator = func(str string) error {
