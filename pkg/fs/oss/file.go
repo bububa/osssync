@@ -72,6 +72,13 @@ func (fi FileInfo) ModTime() time.Time {
 	return fi.obj.LastModified
 }
 
+func (fi FileInfo) UpdateModTime(t time.Time) {
+	if fi.obj == nil {
+		return
+	}
+	fi.obj.LastModified = t
+}
+
 func (fi FileInfo) Size() int64 {
 	if fi.obj == nil {
 		return 0

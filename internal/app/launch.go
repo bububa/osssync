@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"embed"
 	"log"
 
@@ -15,7 +16,7 @@ import (
 //go:embed lang
 var i18n embed.FS
 
-func Launch() {
+func Launch(ctx context.Context) {
 	a := app.NewWithID(config.AppIdentity)
 	if _, ok := a.(desktop.App); !ok {
 		log.Fatalln("invalid platform")
@@ -25,7 +26,7 @@ func Launch() {
 		log.Fatalln(err)
 	}
 	service.Init(cfg)
-	service.Start()
+	service.Start(ctx)
 	defer service.Close()
 	lang.AddTranslationsFS(i18n, "lang")
 	setSystemBar(a)

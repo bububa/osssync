@@ -4,11 +4,14 @@ go 1.23.1
 
 require (
 	fyne.io/fyne/v2 v2.5.2
+	github.com/adrg/xdg v0.5.3
+	github.com/alitto/pond/v2 v2.0.4
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/grafana/tail v0.0.0-20230510142333-77b18831edf0
+	github.com/hanwen/go-fuse/v2 v2.6.3
 	github.com/jinzhu/configor v1.2.2
-	github.com/muesli/go-app-paths v0.2.2
+	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/rs/zerolog v1.33.0
 	github.com/urfave/cli/v2 v2.27.5
 	go.uber.org/atomic v1.11.0
@@ -34,7 +37,6 @@ require (
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
-	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/nicksnyder/go-i18n/v2 v2.4.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect

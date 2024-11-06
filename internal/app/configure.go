@@ -61,9 +61,21 @@ func deleteConfig(setting config.Setting) error {
 	return service.SaveConfig(&cfg)
 }
 
-func EditSetting(a fyne.App, cfg config.Setting, callback func(fyne.App, config.Setting) error) {
+type editCallbackFunc func(a fyne.App, setting config.Setting) error
+
+func EditSetting(a fyne.App, cfg config.Setting, isNew bool) {
 	windowTitle := lang.L("config.create")
 	key := cfg.Key()
+	var (
+		callback editCallbackFunc
+		isUpdate bool
+	)
+	if isNew || cfg == config.EmptySetting {
+		callback = createConfig
+	} else {
+		callback = updateConfig
+		isUpdate = true
+	}
 	if cfg != config.EmptySetting && cfg.Name != "" {
 		if _, ok := configWindowOpened.Load(key); ok {
 			return
@@ -163,6 +175,12 @@ func EditSetting(a fyne.App, cfg config.Setting, callback func(fyne.App, config.
 	deletePointer := &cfg.Delete
 	deleteData := binding.BindBool(deletePointer)
 	deleteField := widget.NewCheckWithData("", deleteData)
+	if isUpdate {
+		folderBtn.Disable()
+		localField.Disable()
+		bucketField.Disable()
+		prefixField.Disable()
+	}
 	form := &widget.Form{
 		Items: []*widget.FormItem{ // we can specify items in the constructor
 			{Text: lang.L("config.name"), Widget: nameField},
@@ -177,11 +195,9 @@ func EditSetting(a fyne.App, cfg config.Setting, callback func(fyne.App, config.
 		},
 		SubmitText: lang.L("Save"),
 		OnSubmit: func() { // optional, handle form submission
-			if callback != nil {
-				if err := callback(a, cfg); err != nil {
-					dialog.ShowError(err, w)
-					return
-				}
+			if err := callback(a, cfg); err != nil {
+				dialog.ShowError(err, w)
+				return
 			}
 			w.Close()
 		},

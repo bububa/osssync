@@ -1,6 +1,8 @@
 package oss
 
 import (
+	"context"
+
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
@@ -30,13 +32,14 @@ func NewClient(
 	}, nil
 }
 
-func (clt *Client) list(name string, cb func([]oss.ObjectProperties) error) ([]oss.ObjectProperties, error) {
+func (clt *Client) list(ctx context.Context, name string, cb func([]oss.ObjectProperties) error) ([]oss.ObjectProperties, error) {
 	var list []oss.ObjectProperties
 	prefix := oss.Prefix(clearDirPath(name))
+	listType := oss.ListType(2)
 	continuationToken := oss.ContinuationToken("")
 	startAfter := oss.StartAfter("")
 	for {
-		res, err := clt.bucket.ListObjectsV2(prefix, startAfter, continuationToken, oss.MaxKeys(MaxKeys))
+		res, err := clt.bucket.ListObjectsV2(prefix, listType, startAfter, continuationToken, oss.MaxKeys(MaxKeys), oss.WithContext(ctx))
 		if err != nil {
 			return list, err
 		}

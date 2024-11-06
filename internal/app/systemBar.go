@@ -11,6 +11,7 @@ import (
 	"github.com/bububa/osssync/internal/config"
 	"github.com/bububa/osssync/internal/service"
 	"github.com/bububa/osssync/internal/service/sync"
+	"github.com/bububa/osssync/pkg"
 )
 
 func setSystemBar(a fyne.App) {
@@ -20,6 +21,7 @@ func setSystemBar(a fyne.App) {
 	menu.Items = menuItems(a)
 	desk.SetSystemTrayMenu(menu)
 	syncing := atomic.NewBool(false)
+	syncingMap := pkg.NewMap[string, bool]()
 	go func() {
 		for {
 			select {
@@ -28,24 +30,54 @@ func setSystemBar(a fyne.App) {
 				menu.Refresh()
 			case ev := <-service.Syncer().Events():
 				var (
-					statusChanged bool
-					status        = syncing.Load()
+					statusChanged       bool
+					updateSyncingStatus bool
+					cfgKey              = ev.Handler.ConfigKey()
 				)
-				if ev.Status == sync.SyncStart && !status {
+				if syncing.Load() {
+					if ev.Status == sync.SyncComplete {
+						syncing.Store(false)
+						statusChanged = true
+					}
+				} else if ev.Status == sync.SyncStart {
 					syncing.Store(true)
 					statusChanged = true
-				} else if ev.Status == sync.SyncComplete && status {
-					syncing.Store(false)
+				}
+				if isSyncing, ok := syncingMap.Load(cfgKey); !ok {
 					statusChanged = true
+					switch ev.Status {
+					case sync.SyncStart:
+						syncingMap.Store(cfgKey, true)
+						updateSyncingStatus = true
+					case sync.SyncComplete:
+						syncingMap.Store(cfgKey, false)
+					}
+				} else if ev.Status == sync.SyncStart && !isSyncing {
+					syncingMap.Store(cfgKey, true)
+					updateSyncingStatus = true
+				} else if ev.Status == sync.SyncComplete && isSyncing {
+					syncingMap.Store(cfgKey, false)
+					updateSyncingStatus = true
 				}
 				if statusChanged {
 					var imgName fyne.ThemedResource
-					if status {
+					if syncing.Load() {
 						imgName = resource.IconSyncing
 					} else {
 						imgName = resource.IconSyncComplete
 					}
 					desk.SetSystemTrayIcon(imgName)
+				}
+				if updateSyncingStatus {
+					for _, m := range menu.Items {
+						if subM := m.ChildMenu; subM != nil && subM.Label == cfgKey {
+							isSyncing, _ := syncingMap.Load(cfgKey)
+							for _, subItem := range subM.Items {
+								subItem.Disabled = isSyncing
+							}
+						}
+					}
+					menu.Refresh()
 				}
 			}
 		}
@@ -53,18 +85,19 @@ func setSystemBar(a fyne.App) {
 }
 
 func menuItems(a fyne.App) []*fyne.MenuItem {
-	addItem := fyne.NewMenuItem(lang.L("systembar.addSetting"), func() { EditSetting(a, config.Setting{}, createConfig) })
+	addItem := fyne.NewMenuItem(lang.L("systembar.addSetting"), func() { EditSetting(a, config.EmptySetting, true) })
 	items := make([]*fyne.MenuItem, 0, len(service.Config().Settings)+4)
 	items = append(items, addItem)
+	mp := make(map[string]*fyne.MenuItem, len(service.Config().Settings))
 	for _, cfg := range service.Config().Settings {
 		item := fyne.NewMenuItem(cfg.DisplayName(), nil)
 		syncItem := fyne.NewMenuItem(lang.L("systembar.sync"), func() { service.Syncer().Sync(&cfg) })
 		syncItem.Icon = theme.UploadIcon()
-		editItem := fyne.NewMenuItem(lang.L("systembar.edit"), func() { EditSetting(a, cfg, updateConfig) })
+		editItem := fyne.NewMenuItem(lang.L("systembar.edit"), func() { EditSetting(a, cfg, false) })
 		editItem.Icon = theme.SettingsIcon()
 		copyItem := fyne.NewMenuItem(lang.L("systembar.duplicate"), func() {
 			cfg.Name = ""
-			EditSetting(a, cfg, createConfig)
+			EditSetting(a, cfg, true)
 		})
 		copyItem.Icon = theme.ContentCopyIcon()
 		deleteItem := fyne.NewMenuItem(lang.L("systembar.delete"), func() { deleteConfig(cfg) })
@@ -75,6 +108,7 @@ func menuItems(a fyne.App) []*fyne.MenuItem {
 			copyItem,
 			deleteItem,
 		)
+		mp[cfg.BucketKey()] = item
 		items = append(items, item)
 	}
 	logItem := fyne.NewMenuItem(lang.L("systembar.log"), func() { LogWindow(a) })

@@ -1,15 +1,19 @@
 package oss
 
+import (
+	"strings"
+)
+
 type Option func(fs *FS)
 
 func WithPrefix(prefix string) Option {
 	return func(fs *FS) {
-		fs.prefix = prefix
+		fs.prefix = strings.TrimPrefix(clearDirPath(prefix), "/")
 	}
 }
 
 func WithLocal(local string) Option {
 	return func(fs *FS) {
-		fs.local = local
+		fs.local = clearDirPath(local)
 	}
 }
