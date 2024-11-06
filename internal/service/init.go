@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+
 	"github.com/bububa/osssync/internal/config"
 )
 
@@ -10,8 +12,8 @@ func Init(cfg *config.Config) {
 	SetConfig(cfg)
 }
 
-func Start() {
-	Syncer().Start(Config())
+func Start(ctx context.Context) {
+	Syncer().Start(ctx, Config())
 }
 
 func Close() {

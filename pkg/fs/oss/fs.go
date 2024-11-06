@@ -1,11 +1,11 @@
 package oss
 
 import (
+	"context"
 	"errors"
 	"io"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -23,7 +23,18 @@ const (
 )
 
 func clearDirPath(dir string) string {
-	return path.Clean(filepath.ToSlash(dir)) + "/"
+	return filepath.Clean(filepath.ToSlash(dir)) + "/"
+}
+
+func cleanRemotePath(name string) string {
+	return filepath.Clean(filepath.ToSlash(name))
+}
+
+func cleanLocalPath(name string) string {
+	if ret, err := filepath.Abs(filepath.ToSlash(name)); err == nil {
+		return ret
+	}
+	return cleanRemotePath(name)
 }
 
 type FS struct {
@@ -44,20 +55,22 @@ func NewFS(clt *Client, opts ...Option) *FS {
 	return ret
 }
 
-func (f *FS) Open(name string) (fs.File, error) {
-	header, err := f.clt.bucket.GetObjectDetailedMeta(name)
+func (f *FS) Open(ctx context.Context, name string) (fs.File, error) {
+	name = f.PathAddPrefix(name)
+	header, err := f.clt.bucket.GetObjectDetailedMeta(name, oss.WithContext(ctx))
 	if err != nil {
 		if e, ok := err.(oss.ServiceError); ok && e.Code == "NoSuchKey" {
 			return nil, fs.ErrNotExist
 		}
 		return nil, err
 	}
-	info := NewFileInfoWithHeader(name, header)
+	info := NewFileInfoWithHeader(f.PathRemovePrefix(name), header)
 	return NewFile(f.clt.bucket, info), nil
 }
 
-func (f *FS) ReadFile(name string) ([]byte, error) {
-	body, err := f.clt.bucket.GetObject(name)
+func (f *FS) ReadFile(ctx context.Context, name string) ([]byte, error) {
+	name = f.PathAddPrefix(name)
+	body, err := f.clt.bucket.GetObject(name, oss.WithContext(ctx))
 	if err != nil {
 		if e, ok := err.(oss.ServiceError); ok && e.Code == "NoSuchKey" {
 			return nil, fs.ErrNotExist
@@ -68,8 +81,8 @@ func (f *FS) ReadFile(name string) ([]byte, error) {
 	return io.ReadAll(body)
 }
 
-func (f *FS) Stat(name string) (fs.FileInfo, error) {
-	file, err := f.Open(name)
+func (f *FS) Stat(ctx context.Context, name string) (fs.FileInfo, error) {
+	file, err := f.Open(ctx, name)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fs.ErrNotExist
@@ -79,27 +92,38 @@ func (f *FS) Stat(name string) (fs.FileInfo, error) {
 	return file.Stat()
 }
 
-func (f *FS) Exists(key string, etag string) bool {
-	var options []oss.Option
+func (f *FS) Exists(ctx context.Context, key string, etag string) bool {
+	key = f.PathAddPrefix(key)
+	options := []oss.Option{oss.WithContext(ctx)}
 	if etag != "" {
-		options = []oss.Option{oss.IfNoneMatch(etag)}
+		options = append(options, oss.IfNoneMatch(etag))
 	}
 	ret, _ := f.clt.bucket.IsObjectExist(key, options...)
 	return ret
 }
 
-func (f *FS) Upload(localFile *local.FileInfo) error {
+func (f *FS) Upload(ctx context.Context, key string, r io.Reader) error {
+	key = f.PathAddPrefix(key)
+	opts := []oss.Option{
+		oss.WithContext(ctx),
+		oss.ACL(oss.ACLPrivate),
+	}
+	return f.clt.bucket.PutObject(key, r, opts...)
+}
+
+func (f *FS) UploadFile(ctx context.Context, localFile *local.FileInfo) error {
 	remotePath, err := f.RemotePathFromLocalFile(localFile)
 	if err != nil {
 		return err
 	}
 
-	if s, err := f.Stat(remotePath); err == nil {
+	if s, err := f.Stat(ctx, remotePath); err == nil {
 		if s.ModTime().After(localFile.ModTime()) {
 			return nil
 		}
 	}
 	opts := []oss.Option{
+		oss.WithContext(ctx),
 		oss.ACL(oss.ACLPrivate),
 		oss.Progress(f.listener.UploadListener(localFile.Path(), remotePath)),
 	}
@@ -111,8 +135,12 @@ func (f *FS) Upload(localFile *local.FileInfo) error {
 	return f.clt.bucket.PutObjectFromFile(remotePath, localFile.Path(), opts...)
 }
 
-func (f *FS) Remove(keys ...string) ([]string, error) {
-	res, err := f.clt.bucket.DeleteObjects(keys)
+func (f *FS) Remove(ctx context.Context, keys ...string) ([]string, error) {
+	fkeys := make([]string, 0, len(keys))
+	for _, v := range keys {
+		fkeys = append(fkeys, f.PathAddPrefix(v))
+	}
+	res, err := f.clt.bucket.DeleteObjects(fkeys, oss.WithContext(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -121,8 +149,9 @@ func (f *FS) Remove(keys ...string) ([]string, error) {
 		f.listener.RemoveListener(v).ProgressChanged(&oss.ProgressEvent{
 			EventType: oss.TransferCompletedEvent,
 		})
+		mp[v] = struct{}{}
 	}
-	for _, v := range keys {
+	for _, v := range fkeys {
 		if _, ok := mp[v]; !ok {
 			f.listener.RemoveListener(v).ProgressChanged(&oss.ProgressEvent{
 				EventType: oss.TransferFailedEvent,
@@ -132,14 +161,15 @@ func (f *FS) Remove(keys ...string) ([]string, error) {
 	return res.DeletedObjects, nil
 }
 
-func (f *FS) RemoveAll(dir string) ([]string, error) {
+func (f *FS) RemoveAll(ctx context.Context, dir string) ([]string, error) {
+	dir = f.PathAddPrefix(dir)
 	var ret []string
-	_, err := f.clt.list(dir, func(list []oss.ObjectProperties) error {
+	_, err := f.clt.list(ctx, dir, func(list []oss.ObjectProperties) error {
 		keys := make([]string, 0, len(list))
 		for _, v := range list {
 			keys = append(keys, v.Key)
 		}
-		if list, err := f.Remove(keys...); err != nil {
+		if list, err := f.Remove(ctx, keys...); err != nil {
 			return err
 		} else {
 			ret = append(ret, list...)
@@ -149,33 +179,80 @@ func (f *FS) RemoveAll(dir string) ([]string, error) {
 	return ret, err
 }
 
-func (f *FS) Rename(src string, dist string) error {
-	if err := f.Copy(src, dist); err != nil {
+func (f *FS) Rename(ctx context.Context, src string, dist string) error {
+	src = f.PathAddPrefix(src)
+	dist = f.PathAddPrefix(dist)
+	if err := f.Copy(ctx, src, dist); err != nil {
 		return err
 	}
-	if _, err := f.Remove(src); err != nil {
+	if _, err := f.Remove(ctx, src); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (f *FS) Copy(src string, dist string) error {
-	_, err := f.clt.bucket.CopyObject(src, dist, oss.Progress(f.listener.CopyListener(src, dist)))
+func (f *FS) RenameDir(ctx context.Context, src string, dist string) error {
+	src = f.PathAddPrefix(src)
+	dist = f.PathAddPrefix(dist)
+	if err := f.Copy(ctx, src, dist); err != nil {
+		return err
+	}
+	_, err := f.clt.list(ctx, src, func(list []oss.ObjectProperties) error {
+		keys := make([]string, 0, len(list))
+		for _, v := range list {
+			keys = append(keys, v.Key)
+			target := cleanRemotePath(filepath.Join(dist, filepath.Base(v.Key)))
+			if err := f.Copy(ctx, v.Key, target); err != nil {
+				return err
+			}
+		}
+		if _, err := f.Remove(ctx, keys...); err != nil {
+			return err
+		} else {
+		}
+		return nil
+	})
 	return err
 }
 
-func (f *FS) Download(remotePath string, localPath string) error {
+func (f *FS) Copy(ctx context.Context, src string, dist string) error {
+	src = f.PathAddPrefix(src)
+	dist = f.PathAddPrefix(dist)
+	_, err := f.clt.bucket.CopyObject(src, dist, oss.Progress(f.listener.CopyListener(src, dist)), oss.WithContext(ctx))
+	return err
+}
+
+func (f *FS) Download(ctx context.Context, remotePath string, localPath string) error {
+	remotePath = f.PathAddPrefix(remotePath)
 	fn := filepath.Base(remotePath)
 	localFile := filepath.Join(localPath, fn)
 	cpDir := f.downloadCheckoutPointPath(localPath, fn)
-	return f.clt.bucket.DownloadFile(remotePath, localFile, DefaultPartSize, oss.Checkpoint(true, cpDir), oss.Progress(f.listener.DownloadListener(remotePath, localFile)))
+	return f.clt.bucket.DownloadFile(remotePath, localFile, DefaultPartSize, oss.Checkpoint(true, cpDir), oss.Progress(f.listener.DownloadListener(remotePath, localFile)), oss.WithContext(ctx))
 }
 
 func (f *FS) RemotePathFromLocalFile(localFile *local.FileInfo) (string, error) {
-	if !strings.HasPrefix(localFile.Path(), f.local) {
+	name := cleanLocalPath(localFile.Path())
+	if !strings.HasPrefix(name, f.local) {
 		return "", errors.New("invalid local file, file not inside local setting path")
 	}
-	return strings.Replace(localFile.Path(), f.local, f.prefix, 1), nil
+	return strings.Replace(name, f.local, f.prefix, 1), nil
+}
+
+func (f *FS) PathRemovePrefix(name string) string {
+	name = cleanRemotePath(name)
+	if !strings.HasPrefix(name, f.prefix) {
+		return name
+	}
+	ret, _ := filepath.Rel(f.prefix, name)
+	return ret
+}
+
+func (f *FS) PathAddPrefix(name string) string {
+	name = cleanRemotePath(name)
+	if strings.HasPrefix(name, f.prefix) {
+		return name
+	}
+	return filepath.Join(f.prefix, name)
 }
 
 func (f *FS) uploadCheckoutPointPath(localFile *local.FileInfo) string {
@@ -190,6 +267,14 @@ func (f *FS) Events() <-chan ProgressEvent {
 	return f.listener.Events()
 }
 
+func (f *FS) Root() string {
+	return f.prefix
+}
+
+func (f *FS) RootEntry() *DirEntry {
+	return NewDirEntry(NewFileInfoWithDir(f.Root()))
+}
+
 func (f *FS) Close() {
 	f.listener.Close()
 }
@@ -201,31 +286,40 @@ func calPartSize(size int64) int64 {
 	return DefaultPartSize
 }
 
+func (fs *FS) ReadDirFile(name string) *ReadDirFile {
+	return NewReadDirFile(fs, name)
+}
+
 type ReadDirFS struct {
 	FS
 }
 
-func NewReadDirFS(fs *FS, name string) *ReadDirFS {
+func NewReadDirFS(fs *FS) *ReadDirFS {
 	ret := new(ReadDirFS)
 	ret.clt = fs.clt
+	ret.prefix = fs.prefix
 	return ret
 }
 
-func (f *ReadDirFS) ReadDir(name string) ([]fs.DirEntry, error) {
+func (f *ReadDirFS) ReadDir(ctx context.Context, name string) ([]fs.DirEntry, error) {
 	var entries []fs.DirEntry
+	name = f.PathAddPrefix(name)
 	prefix := oss.Prefix(clearDirPath(name))
+	listType := oss.ListType(2)
 	continuationToken := oss.ContinuationToken("")
 	startAfter := oss.StartAfter("")
 	for {
-		res, err := f.clt.bucket.ListObjectsV2(prefix, startAfter, continuationToken, oss.Delimiter("/"), oss.MaxKeys(MaxKeys))
+		res, err := f.clt.bucket.ListObjectsV2(prefix, listType, startAfter, continuationToken, oss.Delimiter("/"), oss.MaxKeys(MaxKeys), oss.WithContext(ctx))
 		if err != nil {
 			return entries, err
 		}
 		for _, obj := range res.Objects {
+			obj.Key = f.PathRemovePrefix(obj.Key)
 			entry := NewDirEntry(NewFileInfo(&obj))
 			entries = append(entries, entry)
 		}
 		for _, dir := range res.CommonPrefixes {
+			dir = f.PathRemovePrefix(dir)
 			entry := NewDirEntry(NewFileInfoWithDir(dir))
 			entries = append(entries, entry)
 		}
@@ -243,28 +337,34 @@ type ReadDirFile struct {
 	root              string
 	startAfter        string
 	continuationToken string
+	started           bool
 	isTruncated       bool
 }
 
 func NewReadDirFile(fs *FS, name string) *ReadDirFile {
 	ret := new(ReadDirFile)
 	ret.clt = fs.clt
-	ret.root = name
+	ret.prefix = fs.prefix
+	ret.root = clearDirPath(name)
 	return ret
 }
 
-func (f *ReadDirFile) ReadDir(n int) ([]fs.DirEntry, error) {
+func (f *ReadDirFile) ReadDir(ctx context.Context, n int) ([]fs.DirEntry, error) {
+	f.started = true
 	var entries []fs.DirEntry
-	prefix := oss.Prefix(clearDirPath(f.root))
-	res, err := f.clt.bucket.ListObjectsV2(prefix, oss.StartAfter(f.startAfter), oss.StartAfter(f.continuationToken), oss.Delimiter("/"), oss.MaxKeys(n))
+	prefix := oss.Prefix(clearDirPath(f.PathAddPrefix(f.Dir())))
+	listType := oss.ListType(2)
+	res, err := f.clt.bucket.ListObjectsV2(prefix, listType, oss.StartAfter(f.startAfter), oss.ContinuationToken(f.continuationToken), oss.Delimiter("/"), oss.MaxKeys(n), oss.WithContext(ctx))
 	if err != nil {
 		return entries, err
 	}
 	for _, obj := range res.Objects {
+		obj.Key = f.PathRemovePrefix(obj.Key)
 		entry := NewDirEntry(NewFileInfo(&obj))
 		entries = append(entries, entry)
 	}
 	for _, dir := range res.CommonPrefixes {
+		dir = f.PathRemovePrefix(dir)
 		entry := NewDirEntry(NewFileInfoWithDir(dir))
 		entries = append(entries, entry)
 	}
@@ -279,20 +379,21 @@ func (f *ReadDirFile) ReadDir(n int) ([]fs.DirEntry, error) {
 	return entries, nil
 }
 
+func (f *ReadDirFile) Dir() string {
+	return f.root
+}
+
+func (f *ReadDirFile) DirEntry() *DirEntry {
+	return NewDirEntry(NewFileInfoWithDir(f.Dir()))
+}
+
 func (f *ReadDirFile) Reset() {
 	f.isTruncated = false
 	f.startAfter = ""
 	f.continuationToken = ""
+	f.started = false
 }
 
 func (f *ReadDirFile) Completed() bool {
-	return !f.isTruncated
-}
-
-type SubFS struct {
-	FS
-}
-
-func (f *SubFS) Sub(name string) (fs.FS, error) {
-	return NewReadDirFile(&f.FS, name), nil
+	return !f.isTruncated && f.started
 }

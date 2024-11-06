@@ -1,6 +1,8 @@
 package app
 
 import (
+	"time"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
@@ -25,6 +27,7 @@ func LogWindow(a fyne.App) {
 	w.Resize(fyne.NewSize(600.0, 400))
 	closed := make(chan struct{}, 1)
 	tailer, err := log.TailStart()
+	logsCache := make([]string, 0, 1000)
 	logs := binding.NewStringList()
 	stopped := atomic.NewBool(false)
 	var (
@@ -45,6 +48,7 @@ func LogWindow(a fyne.App) {
 	toolbar = widget.NewToolbar(
 		toggleBtn,
 		widget.NewToolbarAction(theme.ContentClearIcon(), func() {
+			logsCache = make([]string, 0, 1000)
 			logs.Set(nil)
 		}),
 	)
@@ -71,14 +75,21 @@ func LogWindow(a fyne.App) {
 		dialog.ShowError(err, w)
 	}
 	go func() {
+		ticker := time.NewTicker(2 * time.Second)
 		for {
 			select {
 			case line := <-tailer.Lines:
 				if line != nil {
+					logsCache = append([]string{line.Text}, logsCache...)
 					logs.Prepend(line.Text)
 				}
+			case <-ticker.C:
+				list, _ := logs.Get()
+				list = append(logsCache, list...)
+				logs.Set(list)
 			case <-closed:
 				log.TailCleanup(tailer)
+				ticker.Stop()
 				return
 			}
 		}

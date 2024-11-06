@@ -12,7 +12,7 @@ import (
 func Sync(c *cli.Context) error {
 	ctx := c.Context
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
-	service.Start()
+	service.Start(ctx)
 	<-ctx.Done()
 	stop()
 	return nil

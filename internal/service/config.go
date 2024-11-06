@@ -1,12 +1,11 @@
 package service
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 
+	"github.com/adrg/xdg"
 	"github.com/jinzhu/configor"
-	gap "github.com/muesli/go-app-paths"
 
 	"github.com/bububa/osssync/internal/config"
 	"github.com/bububa/osssync/internal/config/template"
@@ -35,41 +34,22 @@ func ConfigLoader(cfg *config.Config, configPath string) error {
 }
 
 func LoadConfig(cfg *config.Config) error {
-	scope := gap.NewScope(gap.User, config.AppIdentity)
-	configPath, err := scope.LookupConfig(config.AppConfig)
+	configPath, err := xdg.ConfigFile(filepath.Join(config.AppIdentity, config.AppConfig))
 	if err != nil {
 		return err
 	}
-	if len(configPath) > 0 {
-		return ConfigLoader(cfg, configPath[0])
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		if err := WriteConfigFile(configPath, nil); err != nil {
+			return err
+		}
 	}
-	cfgPath, err := WriteConfigFile(nil)
-	if err != nil {
-		return err
-	}
-	return ConfigLoader(cfg, cfgPath)
+	return ConfigLoader(cfg, configPath)
 }
 
 func SaveConfig(cfg *config.Config) error {
-	scope := gap.NewScope(gap.User, config.AppIdentity)
-	dirs, err := scope.LookupConfig(config.AppConfig)
+	configPath, err := xdg.ConfigFile(filepath.Join(config.AppIdentity, config.AppConfig))
 	if err != nil {
 		return err
-	}
-	var configPath string
-	if len(dirs) == 0 {
-		dirs, err = scope.ConfigDirs()
-		if err != nil {
-			return err
-		}
-		if err := os.Mkdir(dirs[0], os.ModePerm); err != nil {
-			if !errors.Is(err, os.ErrExist) {
-				return err
-			}
-		}
-		configPath = filepath.Join(dirs[0], config.AppConfig)
-	} else {
-		configPath = dirs[0]
 	}
 	w, err := os.Create(configPath)
 	if err != nil {
@@ -79,34 +59,14 @@ func SaveConfig(cfg *config.Config) error {
 	return template.Template().ExecuteTemplate(w, "config.tpl", cfg)
 }
 
-func WriteConfigFile(bs []byte) (string, error) {
-	scope := gap.NewScope(gap.User, config.AppIdentity)
-	dirs, err := scope.LookupConfig(config.AppConfig)
-	if err != nil {
-		return "", err
-	}
-	var configPath string
-	if len(dirs) == 0 {
-		dirs, err = scope.ConfigDirs()
-		if err != nil {
-			return "", err
-		}
-		if err := os.Mkdir(dirs[0], os.ModePerm); err != nil {
-			if !errors.Is(err, os.ErrExist) {
-				return "", err
-			}
-		}
-		configPath = filepath.Join(dirs[0], config.AppConfig)
-	} else {
-		configPath = dirs[0]
-	}
+func WriteConfigFile(configPath string, bs []byte) error {
 	w, err := os.Create(configPath)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer w.Close()
 	if _, err := w.Write(bs); err != nil {
-		return "", err
+		return err
 	}
-	return configPath, nil
+	return nil
 }

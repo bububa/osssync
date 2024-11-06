@@ -6,6 +6,7 @@
   "systembar.delete": "删除",
   "systembar.sync": "同步",
   "systembar.log": "日志",
+  "systembar.syncing": "同步中, 点击停止",
   "config.create": "新建配置",
   "config.setting": "配置",
   "config.name": "配置名称",
@@ -21,5 +22,6 @@
   "isRequired": "不能为空",
   "chooseConfirm": "确定选择",
   "error.settingNotExist": "配置不存在",
-  "error.duplicateSetting": "相同本地和云端Bucket配置已存在"
+  "error.duplicateSetting": "相同本地和云端Bucket配置已存在",
+  "cloud.files": "云端文件"
 }

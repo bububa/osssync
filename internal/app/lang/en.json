@@ -6,6 +6,7 @@
   "systembar.delete": "Delete",
   "systembar.sync": "Sync",
   "systembar.log": "Log",
+  "systembar.syncing": "Syncing, Click to Stop",
   "config.create": "Create Setting",
   "config.setting": "Setting",
   "config.name": "Name",
@@ -22,7 +23,5 @@
   "chooseConfirm": "Confirm Choose",
   "error.settingNotExist": "Setting doesn't exist",
   "error.duplicateSetting": "Duplicate local folder and oss bucket already exists",
-  "OK": "OK",
-  "Error": "Error",
-  "Quit": "Quit"
+  "cloud.files": "Cloud Files"
 }

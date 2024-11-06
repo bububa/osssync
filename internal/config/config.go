@@ -1,6 +1,10 @@
 package config
 
-import "fmt"
+import (
+	"crypto/md5"
+	"encoding/hex"
+	"fmt"
+)
 
 var EmptySetting Setting
 
@@ -18,6 +22,12 @@ type Setting struct {
 
 func (s Setting) Key() string {
 	return fmt.Sprintf("%s | %s", s.Local, s.BucketKey())
+}
+
+func (s Setting) Mountpoint() string {
+	enc := md5.New()
+	enc.Write([]byte(s.Key()))
+	return hex.EncodeToString(enc.Sum(nil))
 }
 
 func (s Setting) BucketKey() string {

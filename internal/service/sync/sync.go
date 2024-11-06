@@ -1,10 +1,15 @@
 package sync
 
 import (
+	"context"
+	"errors"
+	"fmt"
+
 	"go.uber.org/atomic"
 
 	"github.com/bububa/osssync/internal/config"
 	"github.com/bububa/osssync/internal/service/log"
+	"github.com/bububa/osssync/pkg/fs/oss"
 	"github.com/bububa/osssync/pkg/watcher"
 )
 
@@ -22,27 +27,31 @@ type SyncEvent struct {
 }
 
 type Syncer struct {
-	reloadCh chan *config.Config
-	eventCh  chan SyncEvent
-	stopCh   chan struct{}
-	exitCh   chan struct{}
-	watchers map[string]*watcher.Watcher
-	closed   *atomic.Bool
-	handlers []*Handler
+	reloadCh    chan *config.Config
+	eventCh     chan SyncEvent
+	stopCh      chan struct{}
+	exitCh      chan struct{}
+	watchers    map[string]*watcher.Watcher
+	handlers    map[string]*Handler
+	closed      *atomic.Bool
+	configCache map[string]config.Setting
 }
 
 func NewSyncer() *Syncer {
 	return &Syncer{
-		eventCh:  make(chan SyncEvent, 1000),
-		closed:   atomic.NewBool(false),
-		reloadCh: make(chan *config.Config, 1),
-		stopCh:   make(chan struct{}, 1),
-		exitCh:   make(chan struct{}, 1),
+		configCache: make(map[string]config.Setting),
+		watchers:    make(map[string]*watcher.Watcher),
+		handlers:    make(map[string]*Handler),
+		eventCh:     make(chan SyncEvent, 1000),
+		closed:      atomic.NewBool(false),
+		reloadCh:    make(chan *config.Config, 1),
+		stopCh:      make(chan struct{}, 1),
+		exitCh:      make(chan struct{}, 1),
 	}
 }
 
-func (s *Syncer) Start(cfg *config.Config) error {
-	if err := s.start(cfg); err != nil {
+func (s *Syncer) Start(ctx context.Context, cfg *config.Config) error {
+	if err := s.start(ctx, cfg); err != nil {
 		return err
 	}
 	logger := log.Logger()
@@ -53,12 +62,12 @@ func (s *Syncer) Start(cfg *config.Config) error {
 				if s.closed.Load() {
 					return
 				}
-				if err := s.reload(cfg); err != nil {
+				if err := s.reload(ctx, cfg); err != nil {
 					logger.Error().Err(err).Msg("reload")
 				}
 			case <-s.stopCh:
 				s.closed.Store(true)
-				s.stop()
+				s.stop(nil)
 				close(s.reloadCh)
 				close(s.eventCh)
 				close(s.exitCh)
@@ -90,51 +99,71 @@ func (s *Syncer) Events() <-chan SyncEvent {
 	return s.eventCh
 }
 
-func (s *Syncer) start(cfg *config.Config) error {
+func (s *Syncer) start(ctx context.Context, cfg *config.Config) error {
 	settings := cfg.Settings
-	watchers := make(map[string]*watcher.Watcher, len(settings))
 	handlers := make(map[string][]*Handler, len(settings))
-	s.handlers = make([]*Handler, 0, len(settings))
+	s.watchers = make(map[string]*watcher.Watcher, len(settings))
 	for _, setting := range settings {
 		key := setting.Local
-		if h, err := NewHandler(&setting, s.eventCh); err != nil {
-			return err
+		bucketKey := setting.BucketKey()
+		if h, ok := s.handlers[bucketKey]; ok && !h.HasChange(&setting) {
+			handlers[key] = append(handlers[key], s.handlers[bucketKey])
 		} else {
-			handlers[key] = append(handlers[key], h)
-			s.handlers = append(s.handlers, h)
-		}
-	}
-	for _, setting := range settings {
-		key := setting.Local
-		if _, ok := watchers[key]; !ok {
-			if w, err := Watch(&setting, handlers[key]); err != nil {
+			if h, err := NewHandler(&setting, s.eventCh); err != nil {
 				return err
 			} else {
-				watchers[key] = w
+				handlers[key] = append(handlers[key], h)
+				s.handlers[bucketKey] = h
 			}
 		}
 	}
-	s.watchers = watchers
+	for _, setting := range settings {
+		key := setting.Local
+		if _, ok := s.watchers[key]; !ok {
+			if w, err := Watch(&setting, handlers[key]); err != nil {
+				return err
+			} else {
+				s.watchers[key] = w
+			}
+		}
+	}
 	return nil
 }
 
-func (s *Syncer) reload(cfg *config.Config) error {
-	s.stop()
-	return s.start(cfg)
+func (s *Syncer) reload(ctx context.Context, cfg *config.Config) error {
+	s.stop(cfg)
+	return s.start(ctx, cfg)
 }
 
-func (s *Syncer) stop() {
+func (s *Syncer) stop(cfg *config.Config) {
 	for _, w := range s.watchers {
 		w.Close()
 	}
-	for _, h := range s.handlers {
-		h.Close()
-	}
-	s.handlers = nil
 	s.watchers = nil
+	for bucketKey, h := range s.handlers {
+		if cfg != nil {
+			for _, setting := range cfg.Settings {
+				if !h.HasChange(&setting) {
+					h.Close()
+					delete(s.handlers, bucketKey)
+				}
+			}
+		} else {
+			h.Close()
+		}
+	}
+}
+
+func (s *Syncer) FSByConfig(cfg *config.Setting) (*oss.FS, error) {
+	h, ok := s.handlers[cfg.BucketKey()]
+	if !ok {
+		return nil, errors.New("handler not exists")
+	}
+	return h.fs, nil
 }
 
 func (s *Syncer) Close() {
+	fmt.Println("syncer close")
 	close(s.stopCh)
 	<-s.exitCh
 }
