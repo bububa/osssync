@@ -20,6 +20,10 @@ type File struct {
 	info   *FileInfo
 }
 
+func (f *File) Info() *FileInfo {
+	return f.info
+}
+
 type FileInfo struct {
 	obj *oss.ObjectProperties
 	dir string
@@ -55,6 +59,14 @@ func (fi FileInfo) Path() string {
 		return fi.dir
 	}
 	return fi.obj.Key
+}
+
+func (fi FileInfo) SetPath(path string) {
+	if fi.obj == nil {
+		fi.dir = path
+		return
+	}
+	fi.obj.Key = path
 }
 
 func (fi FileInfo) Name() string {

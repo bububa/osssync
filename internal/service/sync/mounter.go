@@ -35,5 +35,6 @@ func Mount(ctx context.Context, cfg *config.Setting) (*mount.Mounter, error) {
 		return nil, err
 	}
 	mounter := mount.NewMounter(fs, mountpoint, cfg.Mountpoint(), db)
-	return mounter, mounter.Mount(ctx)
+	go mounter.Mount(ctx)
+	return mounter, nil
 }

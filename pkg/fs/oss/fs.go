@@ -3,10 +3,12 @@ package oss
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
@@ -71,6 +73,33 @@ func (f *FS) Open(ctx context.Context, name string) (fs.File, error) {
 func (f *FS) ReadFile(ctx context.Context, name string) ([]byte, error) {
 	name = f.PathAddPrefix(name)
 	body, err := f.clt.bucket.GetObject(name, oss.WithContext(ctx))
+	if err != nil {
+		if e, ok := err.(oss.ServiceError); ok && e.Code == "NoSuchKey" {
+			return nil, fs.ErrNotExist
+		}
+		return nil, err
+	}
+	defer body.Close()
+	return io.ReadAll(body)
+}
+
+func (f *FS) ReadAt(ctx context.Context, name string, size int64, offset int64) ([]byte, error) {
+	name = f.PathAddPrefix(name)
+	if size == 0 {
+		if header, err := f.clt.bucket.GetObjectMeta(name, oss.WithContext(ctx)); err != nil {
+			if e, ok := err.(oss.ServiceError); ok && e.Code == "NoSuchKey" {
+				return nil, fs.ErrNotExist
+			}
+			return nil, err
+		} else {
+			size, _ = strconv.ParseInt(header.Get("Content-Length"), 10, 64)
+		}
+	}
+	if offset >= size {
+		return nil, nil
+	}
+
+	body, err := f.clt.bucket.GetObject(name, oss.Range(offset, size), oss.WithContext(ctx))
 	if err != nil {
 		if e, ok := err.(oss.ServiceError); ok && e.Code == "NoSuchKey" {
 			return nil, fs.ErrNotExist
@@ -194,9 +223,7 @@ func (f *FS) Rename(ctx context.Context, src string, dist string) error {
 func (f *FS) RenameDir(ctx context.Context, src string, dist string) error {
 	src = f.PathAddPrefix(src)
 	dist = f.PathAddPrefix(dist)
-	if err := f.Copy(ctx, src, dist); err != nil {
-		return err
-	}
+	fmt.Println("copy source:", src, ", dist:", dist)
 	_, err := f.clt.list(ctx, src, func(list []oss.ObjectProperties) error {
 		keys := make([]string, 0, len(list))
 		for _, v := range list {

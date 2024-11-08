@@ -13,6 +13,7 @@ import (
 	"github.com/bububa/osssync/internal/config"
 	"github.com/bububa/osssync/internal/service/log"
 	"github.com/bububa/osssync/pkg"
+	"github.com/bububa/osssync/pkg/fs/mount"
 	"github.com/bububa/osssync/pkg/fs/oss"
 	"github.com/bububa/osssync/pkg/watcher"
 )
@@ -20,6 +21,7 @@ import (
 type Handler struct {
 	fs           *oss.FS
 	buffer       *pkg.Map[string, *watcher.Event]
+	mounter      *mount.Mounter
 	eventCh      chan *watcher.Event
 	statusCh     chan<- SyncEvent
 	stopCh       chan struct{}
@@ -84,10 +86,9 @@ func (h *Handler) start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	mounter, err := Mount(ctx, h.cfg)
 	if err != nil {
-		fmt.Println(err)
-	} else {
-		defer mounter.Unmount()
+		logger.Error().Err(err).Send()
 	}
+	h.mounter = mounter
 	go func() {
 		for {
 			select {
@@ -107,10 +108,14 @@ func (h *Handler) start() {
 					h.buffer.Store(event.File.Path(), event)
 				}
 			case <-h.stopCh:
+				fmt.Println("handler closed")
 				cancel()
 				h.closed.Store(true)
 				close(h.eventCh)
 				h.fs.Close()
+				if h.mounter != nil {
+					h.mounter.Unmount()
+				}
 				close(h.exitCh)
 				return
 			}
@@ -118,8 +123,14 @@ func (h *Handler) start() {
 	}()
 }
 
+func (h *Handler) OpenMount() error {
+	if h.mounter == nil {
+		return nil
+	}
+	return h.mounter.Open()
+}
+
 func (h *Handler) Close() {
-	fmt.Println("handler closed")
 	close(h.stopCh)
 	<-h.exitCh
 }
