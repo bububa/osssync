@@ -154,6 +154,14 @@ func (s *Syncer) stop(cfg *config.Config) {
 	}
 }
 
+func (s *Syncer) HandlerByConfig(cfg *config.Setting) (*Handler, error) {
+	h, ok := s.handlers[cfg.BucketKey()]
+	if !ok {
+		return nil, errors.New("handler not exists")
+	}
+	return h, nil
+}
+
 func (s *Syncer) FSByConfig(cfg *config.Setting) (*oss.FS, error) {
 	h, ok := s.handlers[cfg.BucketKey()]
 	if !ok {

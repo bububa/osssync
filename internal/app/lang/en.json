@@ -5,6 +5,7 @@
   "systembar.duplicate": "Duplicate",
   "systembar.delete": "Delete",
   "systembar.sync": "Sync",
+  "systembar.browseCloud": "Browse Cloud Files",
   "systembar.log": "Log",
   "systembar.syncing": "Syncing, Click to Stop",
   "config.create": "Create Setting",
