@@ -1,6 +1,9 @@
 package oss
 
-import "io/fs"
+import (
+	"io/fs"
+	"time"
+)
 
 // DirEntry implements fs.DirEntry.
 type DirEntry struct {
@@ -38,4 +41,19 @@ func (d DirEntry) Info() (fs.FileInfo, error) {
 		return nil, fs.ErrNotExist
 	}
 	return d.info, nil
+}
+
+func (d *DirEntry) SetPath(path string) {
+	if d.info == nil {
+		return
+	}
+	d.info.SetPath(path)
+}
+
+func (d *DirEntry) SetInfo(info *FileInfo) {
+	d.info = info
+}
+
+func (d *DirEntry) UpdateModTime(t time.Time) {
+	d.info.UpdateModTime(t)
 }

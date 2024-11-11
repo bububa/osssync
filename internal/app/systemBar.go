@@ -102,7 +102,7 @@ func menuItems(a fyne.App) []*fyne.MenuItem {
 		copyItem.Icon = theme.ContentCopyIcon()
 		deleteItem := fyne.NewMenuItem(lang.L("systembar.delete"), func() { deleteConfig(cfg) })
 		deleteItem.Icon = theme.DeleteIcon()
-		openItem := fyne.NewMenuItem(lang.L("systembar.browseCloud"), func() { browseCloud(&cfg) })
+		openItem := fyne.NewMenuItem(lang.L("systembar.mount"), func() { mount(&cfg) })
 		openItem.Icon = theme.FolderIcon()
 		item.ChildMenu = fyne.NewMenu(cfg.Key(),
 			syncItem,
@@ -121,10 +121,6 @@ func menuItems(a fyne.App) []*fyne.MenuItem {
 	return items
 }
 
-func browseCloud(cfg *config.Setting) {
-	h, err := service.Syncer().HandlerByConfig(cfg)
-	if err != nil {
-		return
-	}
-	h.OpenMount()
+func mount(cfg *config.Setting) {
+	service.Syncer().Mount(cfg)
 }

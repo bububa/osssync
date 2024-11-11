@@ -3,6 +3,7 @@ package mount
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"time"
@@ -10,23 +11,20 @@ import (
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 
-	"github.com/bububa/osssync/pkg/fs/mount/storage"
 	"github.com/bububa/osssync/pkg/fs/oss"
 )
 
 type Mounter struct {
 	ossFS      *oss.FS
-	db         storage.Storage
 	stopCh     chan struct{}
 	exitCh     chan struct{}
 	mountpoint string
 	name       string
 }
 
-func NewMounter(ossFS *oss.FS, mountpoint string, name string, db storage.Storage) *Mounter {
+func NewMounter(ossFS *oss.FS, mountpoint string, name string) *Mounter {
 	return &Mounter{
 		ossFS:      ossFS,
-		db:         db,
 		mountpoint: mountpoint,
 		name:       name,
 		stopCh:     make(chan struct{}, 1),
@@ -35,32 +33,47 @@ func NewMounter(ossFS *oss.FS, mountpoint string, name string, db storage.Storag
 }
 
 func (m *Mounter) Mount(ctx context.Context) error {
-	root, err := NewFS(ctx, m.ossFS, m.mountpoint, m.db)
-	if err != nil {
-		return err
-	}
+	root := NewFS(ctx, m.ossFS, m.mountpoint)
 	srv, err := mount(m.mountpoint, root, &fs.Options{
-		MountOptions: fuse.MountOptions{DirectMount: true, DirectMountStrict: true, SyncRead: true, FsName: fmt.Sprintf("ossfs/%s", m.name), AllowOther: false, Debug: false, Options: []string{"rw"}},
+		MountOptions: fuse.MountOptions{
+			DisableXAttrs:        true,
+			DirectMount:          true,
+			DirectMountStrict:    true,
+			SyncRead:             true,
+			FsName:               fmt.Sprintf("ossfs/%s", m.name),
+			Name:                 fmt.Sprintf("ossfs/%s", m.name),
+			AllowOther:           false,
+			RememberInodes:       true,
+			IgnoreSecurityLabels: true,
+			Debug:                false,
+		},
 	})
 	if err != nil && srv == nil {
+		fmt.Println(err)
 		return err
 	}
 	go func() {
 		<-m.stopCh
-		srv.Unmount()
-		srv.Wait()
-		m.db.Close()
+		if _, err := os.Stat(m.mountpoint); !os.IsNotExist(err) {
+			srv.Unmount()
+			srv.Wait()
+		}
+		os.RemoveAll(m.mountpoint)
 		m.exitCh <- struct{}{}
 	}()
 	return nil
+}
+
+func (m *Mounter) unmount() {
 }
 
 func mount(dir string, root fs.InodeEmbedder, options *fs.Options) (*fuse.Server, error) {
 	if options == nil {
 		one := time.Second
 		options = &fs.Options{
-			EntryTimeout: &one,
-			AttrTimeout:  &one,
+			EntryTimeout:    &one,
+			AttrTimeout:     &one,
+			NegativeTimeout: &one,
 		}
 	}
 

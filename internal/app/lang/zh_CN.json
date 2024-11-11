@@ -5,7 +5,7 @@
   "systembar.duplicate": "复制",
   "systembar.delete": "删除",
   "systembar.sync": "同步",
-  "systembar.browseCloud": "浏览云端文件",
+  "systembar.mount": "浏览云端文件",
   "systembar.log": "日志",
   "systembar.syncing": "同步中, 点击停止",
   "config.create": "新建配置",

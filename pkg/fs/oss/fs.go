@@ -3,7 +3,6 @@ package oss
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -223,7 +222,6 @@ func (f *FS) Rename(ctx context.Context, src string, dist string) error {
 func (f *FS) RenameDir(ctx context.Context, src string, dist string) error {
 	src = f.PathAddPrefix(src)
 	dist = f.PathAddPrefix(dist)
-	fmt.Println("copy source:", src, ", dist:", dist)
 	_, err := f.clt.list(ctx, src, func(list []oss.ObjectProperties) error {
 		keys := make([]string, 0, len(list))
 		for _, v := range list {

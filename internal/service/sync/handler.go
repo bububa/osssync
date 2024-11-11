@@ -2,7 +2,6 @@ package sync
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"time"
 
@@ -21,7 +20,7 @@ import (
 type Handler struct {
 	fs           *oss.FS
 	buffer       *pkg.Map[string, *watcher.Event]
-	mounter      *mount.Mounter
+	mounter      *atomic.Pointer[mount.Mounter]
 	eventCh      chan *watcher.Event
 	statusCh     chan<- SyncEvent
 	stopCh       chan struct{}
@@ -41,6 +40,7 @@ func NewHandler(cfg *config.Setting, statusCh chan<- SyncEvent) (*Handler, error
 		cfg:          cfg,
 		fs:           fs,
 		buffer:       pkg.NewMap[string, *watcher.Event](),
+		mounter:      atomic.NewPointer[mount.Mounter](nil),
 		enableDelete: cfg.Delete,
 		statusCh:     statusCh,
 		eventCh:      make(chan *watcher.Event, 10000),
@@ -84,11 +84,6 @@ func (h *Handler) start() {
 	}()
 	ticker := time.NewTicker(500 * time.Millisecond)
 	ctx, cancel := context.WithCancel(context.Background())
-	mounter, err := Mount(ctx, h.cfg)
-	if err != nil {
-		logger.Error().Err(err).Send()
-	}
-	h.mounter = mounter
 	go func() {
 		for {
 			select {
@@ -108,14 +103,11 @@ func (h *Handler) start() {
 					h.buffer.Store(event.File.Path(), event)
 				}
 			case <-h.stopCh:
-				fmt.Println("handler closed")
 				cancel()
 				h.closed.Store(true)
 				close(h.eventCh)
 				h.fs.Close()
-				if h.mounter != nil {
-					h.mounter.Unmount()
-				}
+				h.Unmount()
 				close(h.exitCh)
 				return
 			}
@@ -123,11 +115,23 @@ func (h *Handler) start() {
 	}()
 }
 
-func (h *Handler) OpenMount() error {
-	if h.mounter == nil {
-		return nil
+func (h *Handler) Mount() error {
+	mounter := h.mounter.Load()
+	if mounter == nil {
+		if m, err := Mount(context.Background(), h.cfg); err != nil {
+			return err
+		} else {
+			mounter = m
+			h.mounter.Store(mounter)
+		}
 	}
-	return h.mounter.Open()
+	return mounter.Open()
+}
+
+func (h *Handler) Unmount() {
+	if mounter := h.mounter.Load(); mounter != nil {
+		mounter.Unmount()
+	}
 }
 
 func (h *Handler) Close() {

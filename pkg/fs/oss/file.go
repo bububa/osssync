@@ -61,7 +61,7 @@ func (fi FileInfo) Path() string {
 	return fi.obj.Key
 }
 
-func (fi FileInfo) SetPath(path string) {
+func (fi *FileInfo) SetPath(path string) {
 	if fi.obj == nil {
 		fi.dir = path
 		return
@@ -84,7 +84,7 @@ func (fi FileInfo) ModTime() time.Time {
 	return fi.obj.LastModified
 }
 
-func (fi FileInfo) UpdateModTime(t time.Time) {
+func (fi *FileInfo) UpdateModTime(t time.Time) {
 	if fi.obj == nil {
 		return
 	}
