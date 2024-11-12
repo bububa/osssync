@@ -3,11 +3,19 @@ package mount
 import (
 	"context"
 	"fmt"
+	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hanwen/go-fuse/v2/fuse"
 
-	"github.com/bububa/osssync/pkg/fs/mount/storage"
 	"github.com/bububa/osssync/pkg/fs/oss"
+)
+
+const (
+	blockSize   = uint64(4096)
+	totalBlocks = uint64(274877906944) // 1PB / blockSize
+	inodes      = uint64(1000000000)
+	ioSize      = uint32(1048576) // 1MB
 )
 
 var _ = (rootInterface)((*FS)(nil))
@@ -15,6 +23,7 @@ var _ = (rootInterface)((*FS)(nil))
 type rootInterface interface {
 	iFS
 	fs.NodeOnAdder
+	fs.NodeStatfser
 }
 
 type iFS interface {
@@ -23,35 +32,32 @@ type iFS interface {
 	fs.NodeOpener
 	fs.NodeReader
 	fs.NodeWriter
+	fs.NodeCopyFileRanger
 	fs.NodeMkdirer
 	fs.NodeRmdirer
 	fs.NodeRenamer
 	fs.NodeGetattrer
 	fs.NodeSetattrer
+	fs.NodeGetxattrer
+	fs.NodeSetxattrer
 	fs.NodeUnlinker
 	fs.NodeLookuper
-	storage.ModifiedUpdater
+	fs.NodeReleaser
+	fs.NodeReaddirer
 }
 
 type FS struct {
 	iFS
 	ossFS *oss.FS
-	db    storage.Storage
 	mnt   string
 }
 
-func NewFS(ctx context.Context, fs *oss.FS, mnt string, db storage.Storage) (*FS, error) {
-	ret := &FS{
+func NewFS(ctx context.Context, fs *oss.FS, mnt string) *FS {
+	return &FS{
+		iFS:   NewDirEntry(ctx, oss.NewDirEntry(oss.NewFileInfoWithDir("")), fs, mnt),
 		ossFS: fs,
-		db:    db,
 		mnt:   mnt,
 	}
-	dir, err := NewDirEntry(ctx, oss.NewDirEntry(oss.NewFileInfoWithDir("")), fs, db, mnt)
-	if err != nil {
-		return nil, err
-	}
-	ret.iFS = dir
-	return ret, nil
 }
 
 func (f *FS) Mountpoint() string {
@@ -60,10 +66,6 @@ func (f *FS) Mountpoint() string {
 
 func (f *FS) OssFS() *oss.FS {
 	return f.ossFS
-}
-
-func (f *FS) DB() storage.Storage {
-	return f.db
 }
 
 func (r *FS) Iter(ctx context.Context, reader *oss.ReadDirFile, p *fs.Inode) {
@@ -82,37 +84,18 @@ func (r *FS) Iter(ctx context.Context, reader *oss.ReadDirFile, p *fs.Inode) {
 			if entry.IsDir() {
 				child := p.GetChild(entry.Name())
 				if child == nil {
-					dir, err := NewDirEntry(ctx, entry, r.OssFS(), r.DB(), r.Mountpoint())
-					if err != nil {
-						continue
-					}
+					dir := NewDirEntry(ctx, entry, r.OssFS(), r.Mountpoint())
 					child = p.NewPersistentInode(ctx, dir, fs.StableAttr{Mode: F_DIR_RW})
 					p.AddChild(entry.Name(), child, true)
-					op := child.Operations()
-					if _, ok := op.(*DirEntry); ok {
-						fmt.Println("isDirEntry", entry.Name())
-					}
 				}
 				p = child
 				r.Iter(ctx, oss.NewReadDirFile(r.ossFS, entry.Path()), p)
 			} else {
-				fi, err := entry.Info()
-				if err != nil {
-					continue
-				}
-				file, err := NewFile(ctx, fi.(*oss.FileInfo), r.OssFS(), r.DB(), r.Mountpoint())
-				if err != nil {
-					continue
-				}
+				file := NewDirEntry(ctx, entry, r.OssFS(), r.Mountpoint())
 				// Create the file. The Inode must be persistent,
 				// because its life time is not under control of the
 				// kernel.
 				child := p.NewPersistentInode(ctx, file, fs.StableAttr{Mode: F_FILE_RW})
-				op := child.Operations()
-				if _, ok := op.(*File); ok {
-					fmt.Println("isFile", entry.Name())
-				}
-
 				// And add it
 				p.AddChild(entry.Name(), child, true)
 			}
@@ -122,4 +105,20 @@ func (r *FS) Iter(ctx context.Context, reader *oss.ReadDirFile, p *fs.Inode) {
 
 func (r *FS) OnAdd(ctx context.Context) {
 	r.Iter(ctx, oss.NewReadDirFile(r.ossFS, ""), nil)
+}
+
+// Statfs returns a constant (faked) set of details describing a very large
+// file system.
+func (r *FS) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
+	out.Blocks = blockSize
+	out.Bfree = totalBlocks
+	out.Bavail = totalBlocks
+	out.Files = inodes
+	out.Ffree = inodes
+	out.Bsize = ioSize
+	// NameLen uint32
+	// Frsize  uint32
+	// Padding uint32
+	// Spare   [6]uint32
+	return fs.OK
 }

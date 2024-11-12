@@ -5,19 +5,19 @@ import (
 
 	"github.com/urfave/cli/v2"
 
-	"github.com/bububa/osssync/internal/config"
+	"github.com/bububa/osssync/pkg"
 )
 
 func init() {
 	cli.VersionPrinter = func(c *cli.Context) {
-		fmt.Printf("%s-%s@%s\n", config.AppName, config.GitRevision, config.GitTag)
+		fmt.Printf("%s-%s@%s\n", pkg.AppName, pkg.GitRevision, pkg.GitTag)
 	}
 }
 
 func NewApp(app *cli.App) {
 	*app = cli.App{
-		Name:    config.AppName,
-		Version: config.GitTag,
+		Name:    pkg.AppName,
+		Version: pkg.GitTag,
 		Usage:   "sync files to oss",
 		Flags: []cli.Flag{
 			&cli.StringFlag{

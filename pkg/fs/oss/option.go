@@ -17,3 +17,9 @@ func WithLocal(local string) Option {
 		fs.local = clearDirPath(local)
 	}
 }
+
+func WithIgnoreHidden(ignore bool) Option {
+	return func(fs *FS) {
+		fs.ignoreHidden = ignore
+	}
+}

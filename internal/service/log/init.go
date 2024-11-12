@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/adrg/xdg"
+	"github.com/bububa/osssync/pkg"
 	logPkg "github.com/bububa/osssync/pkg/log"
 	"github.com/grafana/tail"
 
@@ -12,7 +13,7 @@ import (
 )
 
 func init() {
-	logPath, err := xdg.DataFile(filepath.Join(config.AppIdentity, config.AppLog))
+	logPath, err := xdg.DataFile(filepath.Join(pkg.AppIdentity, config.AppLog))
 	if err != nil {
 		log.Fatalln(err)
 	}

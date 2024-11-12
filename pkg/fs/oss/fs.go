@@ -3,7 +3,6 @@ package oss
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -39,11 +38,16 @@ func cleanLocalPath(name string) string {
 	return cleanRemotePath(name)
 }
 
+func isHidden(name string) bool {
+	return strings.HasPrefix(filepath.Base(name), ".")
+}
+
 type FS struct {
-	clt      *Client
-	listener *MultiProgressListener
-	local    string
-	prefix   string
+	clt          *Client
+	listener     *MultiProgressListener
+	local        string
+	prefix       string
+	ignoreHidden bool
 }
 
 func NewFS(clt *Client, opts ...Option) *FS {
@@ -58,8 +62,19 @@ func NewFS(clt *Client, opts ...Option) *FS {
 }
 
 func (f *FS) Open(ctx context.Context, name string) (fs.File, error) {
+	return f.OpenWithEtag(ctx, name, "")
+}
+
+func (f *FS) OpenWithEtag(ctx context.Context, name string, etag string) (fs.File, error) {
 	name = f.PathAddPrefix(name)
-	header, err := f.clt.bucket.GetObjectDetailedMeta(name, oss.WithContext(ctx))
+	if f.ignoreHidden && isHidden(name) {
+		return nil, fs.ErrNotExist
+	}
+	opts := []oss.Option{oss.WithContext(ctx)}
+	if etag != "" {
+		opts = append(opts, oss.IfNoneMatch(etag))
+	}
+	header, err := f.clt.bucket.GetObjectDetailedMeta(name, opts...)
 	if err != nil {
 		if e, ok := err.(oss.ServiceError); ok && e.Code == "NoSuchKey" {
 			return nil, fs.ErrNotExist
@@ -72,6 +87,9 @@ func (f *FS) Open(ctx context.Context, name string) (fs.File, error) {
 
 func (f *FS) ReadFile(ctx context.Context, name string) ([]byte, error) {
 	name = f.PathAddPrefix(name)
+	if f.ignoreHidden && isHidden(name) {
+		return nil, fs.ErrNotExist
+	}
 	body, err := f.clt.bucket.GetObject(name, oss.WithContext(ctx))
 	if err != nil {
 		if e, ok := err.(oss.ServiceError); ok && e.Code == "NoSuchKey" {
@@ -85,6 +103,9 @@ func (f *FS) ReadFile(ctx context.Context, name string) ([]byte, error) {
 
 func (f *FS) ReadAt(ctx context.Context, name string, size int64, offset int64) ([]byte, error) {
 	name = f.PathAddPrefix(name)
+	if f.ignoreHidden && isHidden(name) {
+		return nil, fs.ErrNotExist
+	}
 	if size == 0 {
 		if header, err := f.clt.bucket.GetObjectMeta(name, oss.WithContext(ctx)); err != nil {
 			if e, ok := err.(oss.ServiceError); ok && e.Code == "NoSuchKey" {
@@ -123,6 +144,9 @@ func (f *FS) Stat(ctx context.Context, name string) (fs.FileInfo, error) {
 
 func (f *FS) Exists(ctx context.Context, key string, etag string) bool {
 	key = f.PathAddPrefix(key)
+	if f.ignoreHidden && isHidden(key) {
+		return false
+	}
 	options := []oss.Option{oss.WithContext(ctx)}
 	if etag != "" {
 		options = append(options, oss.IfNoneMatch(etag))
@@ -133,6 +157,9 @@ func (f *FS) Exists(ctx context.Context, key string, etag string) bool {
 
 func (f *FS) Upload(ctx context.Context, key string, r io.Reader) error {
 	key = f.PathAddPrefix(key)
+	if f.ignoreHidden && isHidden(key) {
+		return nil
+	}
 	opts := []oss.Option{
 		oss.WithContext(ctx),
 		oss.ACL(oss.ACLPrivate),
@@ -144,6 +171,9 @@ func (f *FS) UploadFile(ctx context.Context, localFile *local.FileInfo) error {
 	remotePath, err := f.RemotePathFromLocalFile(localFile)
 	if err != nil {
 		return err
+	}
+	if f.ignoreHidden && isHidden(remotePath) {
+		return nil
 	}
 
 	if s, err := f.Stat(ctx, remotePath); err == nil {
@@ -223,7 +253,6 @@ func (f *FS) Rename(ctx context.Context, src string, dist string) error {
 func (f *FS) RenameDir(ctx context.Context, src string, dist string) error {
 	src = f.PathAddPrefix(src)
 	dist = f.PathAddPrefix(dist)
-	fmt.Println("copy source:", src, ", dist:", dist)
 	_, err := f.clt.list(ctx, src, func(list []oss.ObjectProperties) error {
 		keys := make([]string, 0, len(list))
 		for _, v := range list {

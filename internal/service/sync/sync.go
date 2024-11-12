@@ -5,11 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"go.uber.org/atomic"
-
 	"github.com/bububa/osssync/internal/config"
 	"github.com/bububa/osssync/internal/service/log"
-	"github.com/bububa/osssync/pkg/fs/oss"
 	"github.com/bububa/osssync/pkg/watcher"
 )
 
@@ -27,26 +24,27 @@ type SyncEvent struct {
 }
 
 type Syncer struct {
-	reloadCh    chan *config.Config
-	eventCh     chan SyncEvent
-	stopCh      chan struct{}
-	exitCh      chan struct{}
-	watchers    map[string]*watcher.Watcher
-	handlers    map[string]*Handler
-	closed      *atomic.Bool
-	configCache map[string]config.Setting
+	reloadCh chan *config.Config
+	syncCh   chan *config.Setting
+	mountCh  chan *config.Setting
+	eventCh  chan SyncEvent
+	stopCh   chan struct{}
+	exitCh   chan struct{}
+	watchers map[string]*watcher.Watcher
+	handlers map[string]*Handler
+	closed   bool
 }
 
 func NewSyncer() *Syncer {
 	return &Syncer{
-		configCache: make(map[string]config.Setting),
-		watchers:    make(map[string]*watcher.Watcher),
-		handlers:    make(map[string]*Handler),
-		eventCh:     make(chan SyncEvent, 1000),
-		closed:      atomic.NewBool(false),
-		reloadCh:    make(chan *config.Config, 1),
-		stopCh:      make(chan struct{}, 1),
-		exitCh:      make(chan struct{}, 1),
+		watchers: make(map[string]*watcher.Watcher),
+		handlers: make(map[string]*Handler),
+		eventCh:  make(chan SyncEvent, 1000),
+		syncCh:   make(chan *config.Setting, 1),
+		mountCh:  make(chan *config.Setting, 1),
+		reloadCh: make(chan *config.Config, 1),
+		stopCh:   make(chan struct{}, 1),
+		exitCh:   make(chan struct{}, 1),
 	}
 }
 
@@ -59,17 +57,29 @@ func (s *Syncer) Start(ctx context.Context, cfg *config.Config) error {
 		for {
 			select {
 			case cfg := <-s.reloadCh:
-				if s.closed.Load() {
+				if s.closed || cfg == nil {
 					return
 				}
 				if err := s.reload(ctx, cfg); err != nil {
 					logger.Error().Err(err).Msg("reload")
 				}
+			case setting := <-s.syncCh:
+				if s.closed || setting == nil {
+					return
+				}
+				s.sync(setting)
+			case setting := <-s.mountCh:
+				if s.closed || setting == nil {
+					return
+				}
+				s.mount(setting)
 			case <-s.stopCh:
-				s.closed.Store(true)
+				s.closed = true
 				s.stop(nil)
 				close(s.reloadCh)
 				close(s.eventCh)
+				close(s.syncCh)
+				close(s.mountCh)
 				close(s.exitCh)
 				return
 			}
@@ -89,10 +99,11 @@ func (s *Syncer) SyncAll() {
 }
 
 func (s *Syncer) Sync(cfg *config.Setting) {
-	handlerKey := cfg.BucketKey()
-	if w, ok := s.watchers[cfg.Local]; ok {
-		w.Notify(handlerKey)
-	}
+	s.syncCh <- cfg
+}
+
+func (s *Syncer) Mount(cfg *config.Setting) {
+	s.mountCh <- cfg
 }
 
 func (s *Syncer) Events() <-chan SyncEvent {
@@ -154,20 +165,19 @@ func (s *Syncer) stop(cfg *config.Config) {
 	}
 }
 
-func (s *Syncer) HandlerByConfig(cfg *config.Setting) (*Handler, error) {
-	h, ok := s.handlers[cfg.BucketKey()]
-	if !ok {
-		return nil, errors.New("handler not exists")
+func (s *Syncer) sync(cfg *config.Setting) {
+	handlerKey := cfg.BucketKey()
+	if w, ok := s.watchers[cfg.Local]; ok {
+		w.Notify(handlerKey)
 	}
-	return h, nil
 }
 
-func (s *Syncer) FSByConfig(cfg *config.Setting) (*oss.FS, error) {
+func (s *Syncer) mount(cfg *config.Setting) error {
 	h, ok := s.handlers[cfg.BucketKey()]
 	if !ok {
-		return nil, errors.New("handler not exists")
+		return errors.New("handler not exists")
 	}
-	return h.fs, nil
+	return h.Mount()
 }
 
 func (s *Syncer) Close() {

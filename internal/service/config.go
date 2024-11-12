@@ -9,6 +9,7 @@ import (
 
 	"github.com/bububa/osssync/internal/config"
 	"github.com/bububa/osssync/internal/config/template"
+	"github.com/bububa/osssync/pkg"
 )
 
 var configSetting *config.Config
@@ -34,7 +35,7 @@ func ConfigLoader(cfg *config.Config, configPath string) error {
 }
 
 func LoadConfig(cfg *config.Config) error {
-	configPath, err := xdg.ConfigFile(filepath.Join(config.AppIdentity, config.AppConfig))
+	configPath, err := xdg.ConfigFile(filepath.Join(pkg.AppIdentity, config.AppConfig))
 	if err != nil {
 		return err
 	}
@@ -47,7 +48,7 @@ func LoadConfig(cfg *config.Config) error {
 }
 
 func SaveConfig(cfg *config.Config) error {
-	configPath, err := xdg.ConfigFile(filepath.Join(config.AppIdentity, config.AppConfig))
+	configPath, err := xdg.ConfigFile(filepath.Join(pkg.AppIdentity, config.AppConfig))
 	if err != nil {
 		return err
 	}

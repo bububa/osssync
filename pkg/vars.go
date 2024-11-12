@@ -1,4 +1,4 @@
-package config
+package pkg
 
 var (
 	GitTag      string // set at compile time with -ldflags
