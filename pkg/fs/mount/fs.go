@@ -32,13 +32,18 @@ type iFS interface {
 	fs.NodeOpener
 	fs.NodeReader
 	fs.NodeWriter
+	fs.NodeCopyFileRanger
 	fs.NodeMkdirer
 	fs.NodeRmdirer
 	fs.NodeRenamer
 	fs.NodeGetattrer
 	fs.NodeSetattrer
+	fs.NodeGetxattrer
+	fs.NodeSetxattrer
 	fs.NodeUnlinker
 	fs.NodeLookuper
+	fs.NodeReleaser
+	fs.NodeReaddirer
 }
 
 type FS struct {

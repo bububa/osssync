@@ -69,11 +69,11 @@ func (m *Mounter) unmount() {
 
 func mount(dir string, root fs.InodeEmbedder, options *fs.Options) (*fuse.Server, error) {
 	if options == nil {
-		one := time.Second
+		timeout := 5 * time.Second
 		options = &fs.Options{
-			EntryTimeout:    &one,
-			AttrTimeout:     &one,
-			NegativeTimeout: &one,
+			EntryTimeout:    &timeout,
+			AttrTimeout:     &timeout,
+			NegativeTimeout: &timeout,
 		}
 	}
 

@@ -24,5 +24,7 @@
   "chooseConfirm": "确定选择",
   "error.settingNotExist": "配置不存在",
   "error.duplicateSetting": "相同本地和云端Bucket配置已存在",
-  "cloud.files": "云端文件"
+  "cloud.files": "云端文件",
+  "delete.confirm.title": "删除警告",
+  "delete.confirm.message": "删除后无法回复，确定删除吗?"
 }

@@ -24,5 +24,7 @@
   "chooseConfirm": "Confirm Choose",
   "error.settingNotExist": "Setting doesn't exist",
   "error.duplicateSetting": "Duplicate local folder and oss bucket already exists",
-  "cloud.files": "Cloud Files"
+  "cloud.files": "Cloud Files",
+  "delete.confirm.title": "DELETION WARNING",
+  "delete.confirm.message": "Can't be restored after delete, Are you sure about this?"
 }

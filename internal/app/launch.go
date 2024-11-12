@@ -11,13 +11,14 @@ import (
 
 	"github.com/bububa/osssync/internal/config"
 	"github.com/bububa/osssync/internal/service"
+	"github.com/bububa/osssync/pkg"
 )
 
 //go:embed lang
 var i18n embed.FS
 
 func Launch(ctx context.Context) {
-	a := app.NewWithID(config.AppIdentity)
+	a := app.NewWithID(pkg.AppIdentity)
 	if _, ok := a.(desktop.App); !ok {
 		log.Fatalln("invalid platform")
 	}

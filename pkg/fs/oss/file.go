@@ -69,6 +69,20 @@ func (fi *FileInfo) SetPath(path string) {
 	fi.obj.Key = path
 }
 
+func (fi *FileInfo) SetSize(size int64) {
+	if fi.obj == nil {
+		return
+	}
+	fi.obj.Size = size
+}
+
+func (fi *FileInfo) SetETag(etag string) {
+	if fi.obj == nil {
+		return
+	}
+	fi.obj.ETag = etag
+}
+
 func (fi FileInfo) Name() string {
 	return filepath.Base(fi.Path())
 }
@@ -84,7 +98,7 @@ func (fi FileInfo) ModTime() time.Time {
 	return fi.obj.LastModified
 }
 
-func (fi *FileInfo) UpdateModTime(t time.Time) {
+func (fi *FileInfo) SetModTime(t time.Time) {
 	if fi.obj == nil {
 		return
 	}
@@ -108,6 +122,13 @@ func (fi FileInfo) Mode() os.FileMode {
 		return mode | os.ModeDir
 	}
 	return mode
+}
+
+func (fi FileInfo) ETag() string {
+	if fi.obj == nil {
+		return ""
+	}
+	return fi.obj.ETag
 }
 
 func (fi FileInfo) Sys() any {
